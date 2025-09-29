@@ -104,6 +104,14 @@ install_nginx() {
     
     # Enable nginx service
     log "Enabling nginx service..."
+
+    # Check if nginx is running, if so, stop it gracefully
+    if systemctl is-active --quiet nginx; then
+        log "nginx is already running, stopping it gracefully..."
+        systemctl stop nginx
+        sleep 2
+    fi
+
     systemctl enable nginx
     systemctl start nginx
     
