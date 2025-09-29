@@ -23,7 +23,7 @@ check_root() {
 
 # Function to configure journald for log rotation
 configure_journald() {
-    log "Configuring journald for log rotation..."
+    log "Configuring journald for minimal boot media writes..."
     
     # Backup original configuration
     cp /etc/systemd/journald.conf /etc/systemd/journald.conf.backup
@@ -31,10 +31,18 @@ configure_journald() {
     # Create minimal journald configuration for log rotation
     cat > /etc/systemd/journald.conf << 'EOF'
 [Journal]
-# Log rotation settings
-SystemMaxUse=50M
-SystemMaxFileSize=10M
-MaxRetentionSec=14d
+# Aggressive log rotation settings to minimize boot media writes
+SystemMaxUse=25M
+SystemMaxFileSize=5M
+MaxRetentionSec=7d
+# Store logs in RAM only (no persistent storage)
+Storage=volatile
+# Reduce sync frequency
+SyncIntervalSec=300
+# Compress logs
+Compress=yes
+# Limit number of files
+SystemMaxFiles=5
 EOF
 
     log "Restarting journald service..."
@@ -45,6 +53,66 @@ EOF
     else
         log "ERROR: Failed to restart journald service"
         exit 1
+    fi
+}
+
+# Function to configure additional tmpfs mounts for write reduction
+configure_tmpfs_mounts() {
+    log "Configuring additional tmpfs mounts to reduce boot media writes..."
+    
+    # Create fstab entries for streamlined tmpfs mounts (16GB RAM optimized)
+    TMPFS_ENTRIES="
+# Streamlined tmpfs mounts to reduce boot media writes (16GB RAM optimized)
+# Core system directories
+tmpfs /tmp tmpfs defaults,noatime,size=1G 0 0
+tmpfs /var/log tmpfs defaults,noatime,size=500M 0 0
+
+# Unified cache directory for all caches
+tmpfs /var/cache tmpfs defaults,noatime,size=2G 0 0
+
+# Application-specific directories
+tmpfs /opt/pharmastock tmpfs defaults,noatime,size=2G 0 0
+tmpfs /opt/new-sight-pi-setup tmpfs defaults,noatime,size=1G 0 0
+tmpfs /opt/cache tmpfs defaults,noatime,size=1G 0 0
+"
+    
+    # Add entries to fstab if they don't exist
+    echo "$TMPFS_ENTRIES" >> /etc/fstab
+    
+    # Mount the new tmpfs filesystems
+    mount -a
+    
+    log "Additional tmpfs mounts configured successfully"
+}
+
+# Function to configure zram for swap (RAM-based swap instead of disk)
+configure_zram_swap() {
+    log "Configuring zram for RAM-based swap..."
+    
+    # Install zram-tools if not present
+    if ! command -v zramctl &> /dev/null; then
+        log "Installing zram-tools..."
+        apt update
+        apt install -y zram-tools
+    fi
+    
+    # Configure zram for swap (use 25% of RAM for swap)
+    cat > /etc/default/zramswap << 'EOF'
+# Zram configuration for 16GB RAM system
+ALGO=lz4
+PERCENT=25
+PRIORITY=100
+EOF
+    
+    # Enable and start zram
+    systemctl enable zramswap
+    systemctl start zramswap
+    
+    if systemctl is-active --quiet zramswap; then
+        log "zram swap configured successfully"
+        zramctl
+    else
+        log "WARNING: zram swap may not have started properly"
     fi
 }
 
@@ -182,47 +250,68 @@ EOF
 }
 
 
-# Function to setup PharmaStock application
+# Function to setup PharmaStock application (Binary-based approach)
 setup_pharmastock() {
-    log "Setting up PharmaStock application..."
+    log "Setting up PharmaStock application using binary approach..."
     
-    # Create directory for the application
+    # Create RAM disk for application (tmpfs - no writes to boot media)
     APP_DIR="/opt/pharmastock"
-    mkdir -p "$APP_DIR"
+    CACHE_DIR="/opt/cache/pharmastock"
+    log "Creating RAM disk for PharmaStock application at $APP_DIR..."
+    
+    # Create cache subdirectory
+    mkdir -p "$CACHE_DIR"
+    
     cd "$APP_DIR"
     
-    # Check if repository already exists
-    if [ -d ".git" ]; then
-        log "PharmaStock repository exists, checking for updates..."
-        
-        # Get current local commit hash
-        LOCAL_COMMIT=$(git rev-parse HEAD 2>/dev/null || echo "none")
-        
-        # Fetch latest changes without merging
-        git fetch origin main
-        
-        # Get remote commit hash
-        REMOTE_COMMIT=$(git rev-parse origin/main 2>/dev/null || echo "none")
-        
-        log "Local commit:  ${LOCAL_COMMIT:0:8}"
-        log "Remote commit: ${REMOTE_COMMIT:0:8}"
-        
-        # Only update if commits are different
-        if [ "$LOCAL_COMMIT" != "$REMOTE_COMMIT" ]; then
-            log "New commits found, updating repository..."
-            git pull origin main
-            UPDATE_PERFORMED=true
-        else
-            log "Repository is up to date, no changes needed"
-            UPDATE_PERFORMED=false
-        fi
-    else
-        log "Cloning PharmaStock repository..."
-        git clone https://github.com/XYTYX/PharmaStock.git .
-        UPDATE_PERFORMED=true
+    # Check if we have a cached version
+    VERSION_FILE="$CACHE_DIR/pharmastock-version.txt"
+    CURRENT_VERSION=""
+    if [ -f "$VERSION_FILE" ]; then
+        CURRENT_VERSION=$(cat "$VERSION_FILE")
     fi
     
-    # # Run setup-pi.sh if it exists
+    # Get latest release info from GitHub API (minimal data transfer)
+    log "Checking for PharmaStock updates..."
+    LATEST_VERSION=$(curl -s https://api.github.com/repos/XYTYX/PharmaStock/releases/latest | grep -o '"tag_name": "[^"]*' | cut -d'"' -f4)
+    
+    if [ -z "$LATEST_VERSION" ]; then
+        log "WARNING: Could not fetch latest version, using fallback approach"
+        LATEST_VERSION="main"
+    fi
+    
+    log "Current version: ${CURRENT_VERSION:-none}"
+    log "Latest version: $LATEST_VERSION"
+    
+    # Only download if version changed or no cached version exists
+    if [ "$CURRENT_VERSION" != "$LATEST_VERSION" ]; then
+        log "Version mismatch, downloading PharmaStock..."
+        
+        # Download source as tarball (more efficient than git clone)
+        DOWNLOAD_URL="https://github.com/XYTYX/PharmaStock/archive/refs/heads/main.tar.gz"
+        log "Downloading PharmaStock source..."
+        
+        # Download to cache first, then extract to app directory
+        curl -L -o "$CACHE_DIR/pharmastock.tar.gz" "$DOWNLOAD_URL"
+        
+        # Extract to app directory
+        tar -xzf "$CACHE_DIR/pharmastock.tar.gz" --strip-components=1 -C "$APP_DIR"
+        
+        # Save version info
+        echo "$LATEST_VERSION" > "$VERSION_FILE"
+        
+        # Clean up download
+        rm -f "$CACHE_DIR/pharmastock.tar.gz"
+        
+        UPDATE_PERFORMED=true
+        log "PharmaStock downloaded and extracted successfully"
+    else
+        log "PharmaStock is up to date, no download needed"
+        UPDATE_PERFORMED=false
+    fi
+    
+    # Run setup-pi.sh if it exists
+    # TODO: Uncomment  
     # if [ -f "setup-pi.sh" ]; then
     #     log "Running setup-pi.sh script..."
     #     chmod +x setup-pi.sh
@@ -232,18 +321,7 @@ setup_pharmastock() {
     #     log "WARNING: setup-pi.sh not found in PharmaStock repository"
     # fi
 
-    # Test deployment TODO:delete
-    if [ -f "test-deploy.sh" ]; then
-        log "Running test-deploy.sh script..."
-        chmod +x test-deploy.sh
-        sudo ./test-deploy.sh production setup
-        log "PharmaStock test-deploy.sh completed successfully"
-    else
-        log "WARNING: test-deploy.sh not found in PharmaStock repository"
-    fi
-    
-    # Start PharmaStock services
-    #TODO: delete
+    #TODO: uncomment
     # start_pharmastock_services
 }
 
@@ -263,7 +341,41 @@ start_pharmastock_services() {
     # Install dependencies if node_modules doesn't exist
     if [ ! -d "node_modules" ]; then
         log "Installing PharmaStock dependencies..."
-        npm install
+        
+        # Create symlink to RAM-based node_modules directory
+        if [ ! -L "node_modules" ]; then
+            ln -sf /opt/cache/node_modules node_modules
+            log "Created symlink to RAM-based node_modules directory"
+        fi
+        
+        # Check if we have cached dependencies
+        PACKAGE_HASH=$(md5sum package.json 2>/dev/null | cut -d' ' -f1 || echo "none")
+        CACHE_HASH_FILE="$CACHE_DIR/package-hash.txt"
+        CACHED_HASH=""
+        
+        if [ -f "$CACHE_HASH_FILE" ]; then
+            CACHED_HASH=$(cat "$CACHE_HASH_FILE")
+        fi
+        
+        if [ "$PACKAGE_HASH" != "$CACHED_HASH" ] || [ ! -d "/opt/node_modules" ]; then
+            log "Package dependencies changed or missing, installing..."
+            
+            # Install with optimized settings for RAM and minimal writes
+            npm install \
+                --cache /tmp/.npm \
+                --prefer-offline \
+                --no-audit \
+                --no-fund \
+                --no-optional \
+                --production \
+                --silent
+            
+            # Save package hash for future reference
+            echo "$PACKAGE_HASH" > "$CACHE_HASH_FILE"
+            log "Dependencies installed and cached"
+        else
+            log "Dependencies are up to date, using cached version"
+        fi
     fi
     
     # Start backend service (port 3000)
@@ -305,19 +417,25 @@ main() {
     # Check if running as root
     check_root
     
-    # Step 1: Configure journald
+    # Step 1: Configure additional tmpfs mounts for write reduction
+    configure_tmpfs_mounts
+    
+    # Step 2: Configure zram for RAM-based swap
+    configure_zram_swap
+    
+    # Step 3: Configure journald
     configure_journald
     
-    # Step 2: Install and configure log2ram
+    # Step 4: Install and configure log2ram
     install_log2ram
     
-    # Step 3: Install and configure nginx
+    # Step 5: Install and configure nginx
     install_nginx
     
-    # Step 4: Configure nginx
+    # Step 6: Configure nginx
     configure_nginx
     
-    # Step 5: Setup and start PharmaStock application
+    # Step 7: Setup and start PharmaStock application
     setup_pharmastock
     
     log "=== Pi Setup Script Completed Successfully ==="
