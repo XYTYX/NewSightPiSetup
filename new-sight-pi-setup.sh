@@ -231,18 +231,29 @@ setup_pharmastock() {
         UPDATE_PERFORMED=true
     fi
     
-    # Run setup-pi.sh if it exists
-    if [ -f "setup-pi.sh" ]; then
-        log "Running setup-pi.sh script..."
-        chmod +x setup-pi.sh
-        ./setup-pi.sh
-        log "PharmaStock setup-pi.sh completed successfully"
+    # # Run setup-pi.sh if it exists
+    # if [ -f "setup-pi.sh" ]; then
+    #     log "Running setup-pi.sh script..."
+    #     chmod +x setup-pi.sh
+    #     ./setup-pi.sh
+    #     log "PharmaStock setup-pi.sh completed successfully"
+    # else
+    #     log "WARNING: setup-pi.sh not found in PharmaStock repository"
+    # fi
+
+    # Test deployment TODO:delete
+    if [ -f "test-deploy.sh" ]; then
+        log "Running test-deploy.sh script..."
+        chmod +x test-deploy.sh
+        ./test-deploy.sh
+        log "PharmaStock test-deploy.sh completed successfully"
     else
-        log "WARNING: setup-pi.sh not found in PharmaStock repository"
+        log "WARNING: test-deploy.sh not found in PharmaStock repository"
     fi
     
     # Start PharmaStock services
-    start_pharmastock_services
+    #TODO: delete
+    # start_pharmastock_services
 }
 
 # Function to start PharmaStock services
@@ -315,7 +326,7 @@ main() {
     # Step 4: Configure nginx
     configure_nginx
     
-    # Step 5: Setup PharmaStock application
+    # Step 5: Setup and start PharmaStock application
     setup_pharmastock
     
     log "=== Pi Setup Script Completed Successfully ==="
