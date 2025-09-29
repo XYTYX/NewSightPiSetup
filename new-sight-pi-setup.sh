@@ -159,37 +159,6 @@ EOF
     fi
 }
 
-# Function to create systemd service for this script
-create_startup_service() {
-    log "Creating systemd service for Pi setup script..."
-    
-    # Get the current script path
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
-    SCRIPT_PATH="$SCRIPT_DIR/$SCRIPT_NAME"
-    
-    cat > /etc/systemd/system/new-sight-pi-setup.service << EOF
-[Unit]
-Description=New Sight Pi Setup Script
-After=multi-user.target
-
-[Service]
-Type=oneshot
-ExecStart=$SCRIPT_PATH
-StandardOutput=journal
-StandardError=journal
-WorkingDirectory=$SCRIPT_DIR
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-    # Enable the service
-    systemctl daemon-reload
-    systemctl enable new-sight-pi-setup.service
-    
-    log "Pi setup service created and enabled"
-}
 
 # Function to setup PharmaStock application
 setup_pharmastock() {
@@ -261,10 +230,7 @@ main() {
     # Step 4: Configure nginx
     configure_nginx
     
-    # Step 5: Create systemd service for auto-startup
-    create_startup_service
-    
-    # Step 6: Setup PharmaStock application
+    # Step 5: Setup PharmaStock application
     setup_pharmastock
     
     log "=== Pi Setup Script Completed Successfully ==="
