@@ -140,9 +140,6 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_cache_bypass $http_upgrade;
         proxy_redirect off;
-        
-        # Handle client-side routing
-        try_files $uri $uri/ @pharmacy;
     }
     
     # Default location for other requests
