@@ -2,7 +2,7 @@
 
 # new-sight-pi-setup.sh
 # Script to configure Raspberry Pi for general use
-# Run this script from /boot/firmware on startup
+# This script is run by the new-sight-init.service systemd service
 
 set -e  # Exit on any error
 
@@ -122,15 +122,46 @@ configure_nginx() {
     # Backup original nginx configuration
     cp /etc/nginx/nginx.conf /etc/nginx/nginx.conf.backup
     
-    # Create basic nginx configuration
+    # Create nginx configuration with pharmacy proxy
     cat > /etc/nginx/sites-available/new-sight << 'EOF'
 server {
     listen 80;
     server_name new-sight.local;
     
-    # Default location - can be configured by separate files
+    # Proxy configuration for /pharmacy path to PharmaStock frontend
+    location /pharmacy {
+        proxy_pass http://localhost:3001;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+        proxy_redirect off;
+        
+        # Handle client-side routing
+        try_files $uri $uri/ @pharmacy;
+    }
+    
+    # Fallback for client-side routing
+    location @pharmacy {
+        proxy_pass http://localhost:3001;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+        proxy_redirect off;
+    }
+    
+    # Default location for other requests
     location / {
-        return 200 'nginx is running on new-sight.local';
+        return 200 'nginx is running on new-sight.local - visit /pharmacy for PharmaStock';
         add_header Content-Type text/plain;
     }
 }
@@ -208,6 +239,60 @@ setup_pharmastock() {
         log "PharmaStock setup-pi.sh completed successfully"
     else
         log "WARNING: setup-pi.sh not found in PharmaStock repository"
+    fi
+    
+    # Start PharmaStock services
+    start_pharmastock_services
+}
+
+# Function to start PharmaStock services
+start_pharmastock_services() {
+    log "Starting PharmaStock services..."
+    
+    APP_DIR="/opt/pharmastock"
+    cd "$APP_DIR"
+    
+    # Check if package.json exists
+    if [ ! -f "package.json" ]; then
+        log "ERROR: package.json not found in PharmaStock directory"
+        return 1
+    fi
+    
+    # Install dependencies if node_modules doesn't exist
+    if [ ! -d "node_modules" ]; then
+        log "Installing PharmaStock dependencies..."
+        npm install
+    fi
+    
+    # Start backend service (port 3000)
+    log "Starting PharmaStock backend on port 3000..."
+    if command -v pm2 &> /dev/null; then
+        # Use PM2 if available
+        pm2 start "npm run dev:backend" --name "pharmastock-backend" --cwd "$APP_DIR"
+    else
+        # Install PM2 if not available
+        log "Installing PM2 process manager..."
+        npm install -g pm2
+        pm2 start "npm run dev:backend" --name "pharmastock-backend" --cwd "$APP_DIR"
+    fi
+    
+    # Start frontend service (port 3001)
+    log "Starting PharmaStock frontend on port 3001..."
+    pm2 start "npm run dev:frontend" --name "pharmastock-frontend" --cwd "$APP_DIR"
+    
+    # Save PM2 configuration
+    pm2 save
+    pm2 startup
+    
+    # Check if services are running
+    if pm2 list | grep -q "pharmastock-backend.*online" && pm2 list | grep -q "pharmastock-frontend.*online"; then
+        log "PharmaStock services started successfully"
+        log "Backend: http://localhost:3000"
+        log "Frontend: http://localhost:3001"
+        log "Pharmacy: http://new-sight.local/pharmacy"
+    else
+        log "WARNING: Some PharmaStock services may not have started properly"
+        pm2 list
     fi
 }
 
