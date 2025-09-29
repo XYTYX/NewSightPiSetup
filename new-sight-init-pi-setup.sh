@@ -71,14 +71,23 @@ setup_new_sight() {
 
 # Function to create systemd service for this initialization script
 create_init_service() {
-    log "Creating systemd service for initialization script..."
+    log "Setting up systemd service for initialization script..."
     
     # Get the current script path
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
     SCRIPT_PATH="$SCRIPT_DIR/$SCRIPT_NAME"
     
-    cat > /etc/systemd/system/new-sight-init.service << EOF
+    # Check if service already exists
+    if systemctl list-unit-files | grep -q "new-sight-init.service"; then
+        log "Service already exists, checking if update is needed..."
+        
+        # Check if the service file needs updating by comparing content
+        CURRENT_SERVICE="/etc/systemd/system/new-sight-init.service"
+        if [ -f "$CURRENT_SERVICE" ]; then
+            # Create temporary file with new service content
+            TEMP_SERVICE="/tmp/new-sight-init.service.tmp"
+            cat > "$TEMP_SERVICE" << EOF
 [Unit]
 Description=New Sight Pi Initialization Script
 After=multi-user.target
@@ -93,12 +102,70 @@ WorkingDirectory=$SCRIPT_DIR
 [Install]
 WantedBy=multi-user.target
 EOF
+            
+            # Compare files (ignore whitespace differences)
+            if ! diff -q "$CURRENT_SERVICE" "$TEMP_SERVICE" > /dev/null 2>&1; then
+                log "Service configuration has changed, updating..."
+                cp "$TEMP_SERVICE" "$CURRENT_SERVICE"
+                systemctl daemon-reload
+                log "Service updated successfully"
+            else
+                log "Service configuration is up to date"
+            fi
+            
+            # Clean up temporary file
+            rm -f "$TEMP_SERVICE"
+        else
+            log "Service file missing, creating..."
+            cat > "$CURRENT_SERVICE" << EOF
+[Unit]
+Description=New Sight Pi Initialization Script
+After=multi-user.target
 
-    # Enable the service
-    systemctl daemon-reload
+[Service]
+Type=oneshot
+ExecStart=$SCRIPT_PATH
+StandardOutput=journal
+StandardError=journal
+WorkingDirectory=$SCRIPT_DIR
+
+[Install]
+WantedBy=multi-user.target
+EOF
+            systemctl daemon-reload
+            log "Service created successfully"
+        fi
+    else
+        log "Creating new systemd service..."
+        cat > /etc/systemd/system/new-sight-init.service << EOF
+[Unit]
+Description=New Sight Pi Initialization Script
+After=multi-user.target
+
+[Service]
+Type=oneshot
+ExecStart=$SCRIPT_PATH
+StandardOutput=journal
+StandardError=journal
+WorkingDirectory=$SCRIPT_DIR
+
+[Install]
+WantedBy=multi-user.target
+EOF
+        systemctl daemon-reload
+        log "Service created successfully"
+    fi
+    
+    # Enable the service (idempotent operation)
+    log "Enabling service..."
     systemctl enable new-sight-init.service
     
-    log "Initialization service created and enabled"
+    # Check if service is enabled
+    if systemctl is-enabled new-sight-init.service > /dev/null 2>&1; then
+        log "Service is enabled and ready"
+    else
+        log "WARNING: Failed to enable service"
+    fi
 }
 
 # Main execution
