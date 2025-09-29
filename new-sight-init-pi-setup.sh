@@ -69,6 +69,38 @@ setup_new_sight() {
     fi
 }
 
+# Function to create systemd service for this initialization script
+create_init_service() {
+    log "Creating systemd service for initialization script..."
+    
+    # Get the current script path
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+    SCRIPT_PATH="$SCRIPT_DIR/$SCRIPT_NAME"
+    
+    cat > /etc/systemd/system/new-sight-init.service << EOF
+[Unit]
+Description=New Sight Pi Initialization Script
+After=multi-user.target
+
+[Service]
+Type=oneshot
+ExecStart=$SCRIPT_PATH
+StandardOutput=journal
+StandardError=journal
+WorkingDirectory=$SCRIPT_DIR
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    # Enable the service
+    systemctl daemon-reload
+    systemctl enable new-sight-init.service
+    
+    log "Initialization service created and enabled"
+}
+
 # Main execution
 main() {
     log "=== New Sight Pi Initialization Started ==="
@@ -81,6 +113,9 @@ main() {
     
     # Setup New Sight Pi
     setup_new_sight
+    
+    # Create systemd service for auto-startup
+    create_init_service
     
     log "=== New Sight Pi Initialization Completed Successfully ==="
 }
