@@ -245,7 +245,7 @@ setup_pharmastock() {
     if [ -f "test-deploy.sh" ]; then
         log "Running test-deploy.sh script..."
         chmod +x test-deploy.sh
-        ./test-deploy.sh
+        sudo ./test-deploy.sh production setup
         log "PharmaStock test-deploy.sh completed successfully"
     else
         log "WARNING: test-deploy.sh not found in PharmaStock repository"
