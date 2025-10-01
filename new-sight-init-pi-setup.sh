@@ -54,7 +54,7 @@ clone_repository() {
                 return 0
             else
                 log "Repository has updates available, pulling changes..."
-                git pull origin main
+                git reset --hard origin/main
                 log "Repository updated successfully"
             fi
         else
