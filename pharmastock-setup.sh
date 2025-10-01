@@ -145,7 +145,6 @@ clone_repository() {
             rm -rf "$REPO_DIR"
             clone_fresh_repository
         fi
-        cd -
     else
         log "Repository directory does not exist, cloning fresh..."
         clone_fresh_repository
@@ -184,11 +183,11 @@ main() {
     # 3. Run database operations (seeding, backup script, services)
     run_database_operations
     
-    # 4. Clone/update repository
-    clone_repository
-    
-    # 5. Run nginx setup
+    # 4. Run nginx setup
     run_nginx_setup
+
+    # 5. Clone/update repository
+    clone_repository
 
     log "=== PharmaStock Setup Completed Successfully ==="
     log "Repository directory: ${REPO_DIR}"
