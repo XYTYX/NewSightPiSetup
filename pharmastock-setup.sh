@@ -83,8 +83,6 @@ run_database_operations() {
 run_nginx_setup() {
     log "Running nginx setup script..."
 
-    log "Current working directory: $(pwd)"
-
     # Check if nginx-setup.sh exists
     if [ ! -f "./nginx-setup.sh" ]; then
         log "ERROR: nginx-setup.sh not found in current directory"
@@ -147,6 +145,7 @@ clone_repository() {
             rm -rf "$REPO_DIR"
             clone_fresh_repository
         fi
+        cd -
     else
         log "Repository directory does not exist, cloning fresh..."
         clone_fresh_repository
