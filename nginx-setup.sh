@@ -7,7 +7,7 @@ set -e  # Exit on any error
 
 # Configuration
 HOSTNAME="new-sight.local"
-APP_PORT="3000"
+APP_PORT="3001"
 APP_PATH="/"
 NGINX_CONFIG_DIR="/etc/nginx"
 SITES_AVAILABLE_DIR="${NGINX_CONFIG_DIR}/sites-available"
