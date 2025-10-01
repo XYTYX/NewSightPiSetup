@@ -145,6 +145,7 @@ clone_repository() {
             rm -rf "$REPO_DIR"
             clone_fresh_repository
         fi
+        cd /
     else
         log "Repository directory does not exist, cloning fresh..."
         clone_fresh_repository
