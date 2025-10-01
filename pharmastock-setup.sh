@@ -79,6 +79,26 @@ run_database_operations() {
     log "Database operations completed"
 }
 
+# Function to run nginx setup
+run_nginx_setup() {
+    log "Running nginx setup script..."
+    
+    # Check if nginx-setup.sh exists
+    if [ ! -f "./nginx-setup.sh" ]; then
+        log "ERROR: nginx-setup.sh not found in current directory"
+        exit 1
+    fi
+    
+    # Make the script executable
+    chmod +x nginx-setup.sh
+    
+    # Run the nginx setup script
+    log "Executing nginx-setup.sh..."
+    sudo ./nginx-setup.sh
+    
+    log "Nginx setup completed"
+}
+
 # Function to clone or update the repository
 clone_repository() {
     log "Checking PharmaStock repository..."
@@ -166,6 +186,9 @@ main() {
     # 4. Clone/update repository
     clone_repository
     
+    # 5. Run nginx setup
+    run_nginx_setup
+
     log "=== PharmaStock Setup Completed Successfully ==="
     log "Repository directory: ${REPO_DIR}"
     log "Cache directory: ${CACHE_DIR}"
@@ -176,6 +199,11 @@ main() {
     log "  - Database seeding from backups"
     log "  - Daily backup system"
     log "  - Shutdown backup system"
+    log ""
+    log "Nginx reverse proxy has been configured:"
+    log "  - Access your application at: http://new-sight.local/"
+    log "  - Backend: localhost:3000"
+    log "  - Configuration: /etc/nginx/sites-available/new-sight"
 }
 
 # Run main function

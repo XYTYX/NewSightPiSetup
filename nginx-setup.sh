@@ -1,14 +1,14 @@
 #!/bin/bash
 
 # nginx-setup.sh
-# Setup nginx reverse proxy for new-sight.local/pharmacy -> 127.0.0.1:3001
+# Setup nginx reverse proxy for new-sight.local -> localhost:3000
 
 set -e  # Exit on any error
 
 # Configuration
 HOSTNAME="new-sight.local"
-APP_PORT="3001"
-APP_PATH="/pharmacy"
+APP_PORT="3000"
+APP_PATH="/"
 NGINX_CONFIG_DIR="/etc/nginx"
 SITES_AVAILABLE_DIR="${NGINX_CONFIG_DIR}/sites-available"
 SITES_ENABLED_DIR="${NGINX_CONFIG_DIR}/sites-enabled"
@@ -41,7 +41,7 @@ install_nginx() {
 
 # Function to create nginx configuration
 create_nginx_config() {
-    log "Creating nginx configuration for ${HOSTNAME}${APP_PATH} -> 127.0.0.1:${APP_PORT}..."
+    log "Creating nginx configuration for ${HOSTNAME} -> localhost:${APP_PORT}..."
     
     # Create the configuration file
     cat > "${SITES_AVAILABLE_DIR}/${CONFIG_FILE}" << EOF
@@ -49,9 +49,9 @@ server {
     listen 80;
     server_name ${HOSTNAME};
     
-    # Main application proxy
-    location ${APP_PATH}/ {
-        proxy_pass http://127.0.0.1:${APP_PORT}/;
+    # Main application proxy - forward all requests to localhost:3000
+    location / {
+        proxy_pass http://127.0.0.1:${APP_PORT};
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
@@ -66,16 +66,6 @@ server {
         proxy_connect_timeout 60s;
         proxy_send_timeout 60s;
         proxy_read_timeout 60s;
-    }
-    
-    # Redirect root to pharmacy path
-    location = / {
-        return 301 ${APP_PATH}/;
-    }
-    
-    # Default location for other paths
-    location / {
-        return 404;
     }
 }
 EOF
@@ -198,11 +188,10 @@ main() {
     log ""
     log "Configuration details:"
     log "  - Hostname: ${HOSTNAME}"
-    log "  - Application path: ${APP_PATH}"
-    log "  - Backend: 127.0.0.1:${APP_PORT}"
+    log "  - Backend: localhost:${APP_PORT}"
     log "  - Config file: ${SITES_AVAILABLE_DIR}/${CONFIG_FILE}"
     log ""
-    log "Access your application at: http://${HOSTNAME}${APP_PATH}/"
+    log "Access your application at: http://${HOSTNAME}/"
     log ""
     log "Service management commands:"
     log "  - Check nginx status: systemctl status nginx"

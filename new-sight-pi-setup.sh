@@ -10,7 +10,7 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
 }
 
-# Function to install log2ram if not exists
+# Function to install log2ram if not exists, essential for Raspberry Pi boot media protection
 install_log2ram() {
     log "Checking for log2ram installation..."
     
