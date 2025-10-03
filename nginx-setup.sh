@@ -81,9 +81,9 @@ server {
     # API routes - proxy to backend
     location /api/ {
         # Remove /api prefix when forwarding to backend
-        rewrite ^/api/(.*) /$1 break;
+        # rewrite ^/api/(.*) /$1 break;
         
-        proxy_pass http://localhost:3000;
+        proxy_pass http://localhost:3000/;
         proxy_http_version 1.1;
         
         # CORS headers for API
